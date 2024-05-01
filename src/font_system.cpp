@@ -1576,7 +1576,7 @@ static Glyph* fsAllocGlyph(FontSystem* fs, Font* font)
 //////////////////////////////////////////////////////////////////////////
 // stbtt Backend
 //
-#include "libs/stb_truetype.h"
+#include <stb/stb_truetype.h>
 
 #define FS_STBTT_FIRST_GLYPH        0x20
 #define FS_STBTT_LAST_GLYPH         0x7E
