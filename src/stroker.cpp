@@ -1,6 +1,6 @@
 #include <vg/stroker.h>
 #include "vg_util.h"
-#include "libtess2/tesselator.h"
+#include <libtess2/tesselator.h>
 #include <bx/allocator.h>
 #include <bx/math.h>
 #include <string.h> // memcpy
