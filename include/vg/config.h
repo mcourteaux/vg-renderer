@@ -32,15 +32,6 @@
 #	define VG_CONFIG_COMMAND_LIST_PRESERVE_STATE 0
 #endif
 
-// NOTE: beginCommandList()/endCommandList() blocks require an indirect jump for each function/path command,
-// because they change the Context' vtable. If this is set to 0, all functions call their implementation 
-// directly (i.e. there will probably still be a jump there but it'll be unconditional/direct).
-// If you care about perf so much that an indirect unconditional jump is a problem for you, or if you aren't
-// planning on using command lists at all, set this to 0 and use only clXXX functions to build command lists. 
-#ifndef VG_CONFIG_COMMAND_LIST_BEGIN_END_API
-#	define VG_CONFIG_COMMAND_LIST_BEGIN_END_API 1
-#endif
-
 #define VG_EPSILON 1e-5f
 
 #define VG_COLOR_RED_Pos     0

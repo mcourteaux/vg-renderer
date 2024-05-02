@@ -430,10 +430,6 @@ CommandListHandle createCommandList(Context* ctx, uint32_t flags);
 void destroyCommandList(Context* ctx, CommandListHandle handle);
 void resetCommandList(Context* ctx, CommandListHandle handle);
 void submitCommandList(Context* ctx, CommandListHandle handle);
-#if VG_CONFIG_COMMAND_LIST_BEGIN_END_API
-void beginCommandList(Context* ctx, CommandListHandle handle);
-void endCommandList(Context* ctx);
-#endif
 
 void clBeginPath(Context* ctx, CommandListHandle handle);
 void clMoveTo(Context* ctx, CommandListHandle handle, float x, float y);

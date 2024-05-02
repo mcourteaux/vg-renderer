@@ -343,10 +343,6 @@ VG_C_API vg_command_list_handle vg_createCommandList(vg_context* ctx, uint32_t f
 VG_C_API void vg_destroyCommandList(vg_context* ctx, vg_command_list_handle handle);
 VG_C_API void vg_resetCommandList(vg_context* ctx, vg_command_list_handle handle);
 VG_C_API void vg_submitCommandList(vg_context* ctx, vg_command_list_handle handle);
-#if VG_CONFIG_COMMAND_LIST_BEGIN_END_API
-VG_C_API void vg_beginCommandList(vg_context* ctx, vg_command_list_handle handle);
-VG_C_API void vg_endCommandList(vg_context* ctx);
-#endif
 
 VG_C_API void vg_clBeginPath(vg_context* ctx, vg_command_list_handle handle);
 VG_C_API void vg_clMoveTo(vg_context* ctx, vg_command_list_handle handle, float x, float y);
@@ -485,10 +481,6 @@ typedef struct vg_api
 	void (*destroyCommandList)(vg_context* ctx, vg_command_list_handle handle);
 	void (*resetCommandList)(vg_context* ctx, vg_command_list_handle handle);
 	void (*submitCommandList)(vg_context* ctx, vg_command_list_handle handle);
-#if VG_CONFIG_COMMAND_LIST_BEGIN_END_API
-	void (*beginCommandList)(vg_context* ctx, vg_command_list_handle handle);
-	void (*endCommandList)(vg_context* ctx);
-#endif
 
 	void (*clBeginPath)(vg_context* ctx, vg_command_list_handle handle);
 	void (*clMoveTo)(vg_context* ctx, vg_command_list_handle handle, float x, float y);

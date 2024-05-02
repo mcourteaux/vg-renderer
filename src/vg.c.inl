@@ -399,19 +399,6 @@ VG_C_API void vg_submitCommandList(vg_context* ctx, vg_command_list_handle clh)
 	vg::submitCommandList((vg::Context*)ctx, handle.cpp);
 }
 
-#if VG_CONFIG_COMMAND_LIST_BEGIN_END_API
-VG_C_API void vg_beginCommandList(vg_context* ctx, vg_command_list_handle clh)
-{
-	union { vg_command_list_handle c; vg::CommandListHandle cpp; } handle = { clh };
-	vg::beginCommandList((vg::Context*)ctx, handle.cpp);
-}
-
-VG_C_API void vg_endCommandList(vg_context* ctx)
-{
-	vg::endCommandList((vg::Context*)ctx);
-}
-#endif
-
 VG_C_API void vg_clBeginPath(vg_context* ctx, vg_command_list_handle clh)
 {
 	union { vg_command_list_handle c; vg::CommandListHandle cpp; } handle = { clh };
@@ -749,10 +736,6 @@ VG_C_API vg_api* vg_getAPI()
 		vg_destroyCommandList,
 		vg_resetCommandList,
 		vg_submitCommandList,
-	#if VG_CONFIG_COMMAND_LIST_BEGIN_END_API
-		vg_beginCommandList,
-		vg_endCommandList,
-	#endif
 		vg_clBeginPath,
 		vg_clMoveTo,
 		vg_clLineTo,
