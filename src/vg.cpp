@@ -527,9 +527,9 @@ Context* createContext(bx::AllocatorI* allocator, const ContextConfig* userCfg)
 	ctx->m_CmdListCacheStackTop = ~0u;
 #endif
 
-	ctx->m_PosBufferPool = allocator; // BX_NEW(allocator, vgutil::PoolAllocator)(sizeof(float) * 2 * ctx->m_Config.m_MaxVBVertices, 4, allocator);
-	ctx->m_ColorBufferPool = allocator; // BX_NEW(allocator, vgutil::PoolAllocator)(sizeof(uint32_t) * ctx->m_Config.m_MaxVBVertices, 4, allocator);
-	ctx->m_UVBufferPool = allocator; // BX_NEW(allocator, vgutil::PoolAllocator)(sizeof(uv_t) * 2 * ctx->m_Config.m_MaxVBVertices, 4, allocator);
+	ctx->m_PosBufferPool = BX_NEW(allocator, bx::DefaultAllocator)(); // vgutil::PoolAllocator)(sizeof(float) * 2 * ctx->m_Config.m_MaxVBVertices, 4, allocator);
+	ctx->m_ColorBufferPool = BX_NEW(allocator, bx::DefaultAllocator)(); // vgutil::PoolAllocator)(sizeof(uint32_t) * ctx->m_Config.m_MaxVBVertices, 4, allocator);
+	ctx->m_UVBufferPool = BX_NEW(allocator, bx::DefaultAllocator)(); // vgutil::PoolAllocator)(sizeof(uv_t) * 2 * ctx->m_Config.m_MaxVBVertices, 4, allocator);
 
 #if BX_CONFIG_SUPPORTS_THREADING
 	ctx->m_DataPoolMutex = BX_NEW(allocator, bx::Mutex)();
@@ -661,17 +661,17 @@ void destroyContext(Context* ctx)
 	ctx->m_ActiveIndexBufferID = UINT16_MAX;
 
 	if (ctx->m_UVBufferPool) {
-		bx::deleteObject(ctx->m_Allocator, ctx->m_UVBufferPool);
+		bx::deleteObject(allocator, ctx->m_UVBufferPool);
 		ctx->m_UVBufferPool = nullptr;
 	}
 
 	if (ctx->m_ColorBufferPool) {
-		bx::deleteObject(ctx->m_Allocator, ctx->m_ColorBufferPool);
+		bx::deleteObject(allocator, ctx->m_ColorBufferPool);
 		ctx->m_ColorBufferPool = nullptr;
 	}
 
 	if (ctx->m_PosBufferPool) {
-		bx::deleteObject(ctx->m_Allocator, ctx->m_PosBufferPool);
+		bx::deleteObject(allocator, ctx->m_PosBufferPool);
 		ctx->m_PosBufferPool = nullptr;
  	}
 
