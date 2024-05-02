@@ -300,16 +300,10 @@ struct Context
 	uint32_t m_NumIndexBuffers;
 	uint16_t m_ActiveIndexBufferID;
 
-	float** m_Vec2DataPool;
-	uint32_t m_Vec2DataPoolCapacity;
+	bx::AllocatorI* m_PosBufferPool;
+	bx::AllocatorI* m_ColorBufferPool;
+	bx::AllocatorI* m_UVBufferPool;
 
-	uint32_t** m_Uint32DataPool;
-	uint32_t m_Uint32DataPoolCapacity;
-
-#if VG_CONFIG_UV_INT16
-	int16_t** m_UVDataPool;
-	uint32_t m_UVDataPoolCapacity;
-#endif
 #if BX_CONFIG_SUPPORTS_THREADING
 	bx::Mutex* m_DataPoolMutex;
 #endif
@@ -373,22 +367,13 @@ static float* allocTransformedVertices(Context* ctx, uint32_t numVertices);
 static const float* transformPath(Context* ctx);
 
 static VertexBuffer* allocVertexBuffer(Context* ctx);
-static float* allocVertexBufferData_Vec2(Context* ctx);
-static uint32_t* allocVertexBufferData_Uint32(Context* ctx);
-static void releaseVertexBufferData_Vec2(Context* ctx, float* data);
-static void releaseVertexBufferData_Uint32(Context* ctx, uint32_t* data);
-static void releaseVertexBufferDataCallback_Vec2(void* ptr, void* userData);
-static void releaseVertexBufferDataCallback_Uint32(void* ptr, void* userData);
+static void releaseVertexBufferPosCallback(void* ptr, void* userData);
+static void releaseVertexBufferColorCallback(void* ptr, void* userData);
+static void releaseVertexBufferUVCallback(void* ptr, void* userData);
 
 static uint16_t allocIndexBuffer(Context* ctx);
 static void releaseIndexBuffer(Context* ctx, uint16_t* data);
 static void releaseIndexBufferCallback(void* ptr, void* userData);
-
-#if VG_CONFIG_UV_INT16
-static int16_t* allocVertexBufferData_UV(Context* ctx);
-static void releaseVertexBufferData_UV(Context* ctx, int16_t* data);
-static void releaseVertexBufferDataCallback_UV(void* ptr, void* userData);
-#endif
 
 static DrawCommand* allocDrawCommand(Context* ctx, uint32_t numVertices, uint32_t numIndices, DrawCommand::Type::Enum type, uint16_t handle);
 static DrawCommand* allocClipCommand(Context* ctx, uint32_t numVertices, uint32_t numIndices);
@@ -542,6 +527,10 @@ Context* createContext(bx::AllocatorI* allocator, const ContextConfig* userCfg)
 	ctx->m_CmdListCacheStackTop = ~0u;
 #endif
 
+	ctx->m_PosBufferPool = allocator; // BX_NEW(allocator, vgutil::PoolAllocator)(sizeof(float) * 2 * ctx->m_Config.m_MaxVBVertices, 4, allocator);
+	ctx->m_ColorBufferPool = allocator; // BX_NEW(allocator, vgutil::PoolAllocator)(sizeof(uint32_t) * ctx->m_Config.m_MaxVBVertices, 4, allocator);
+	ctx->m_UVBufferPool = allocator; // BX_NEW(allocator, vgutil::PoolAllocator)(sizeof(uv_t) * 2 * ctx->m_Config.m_MaxVBVertices, 4, allocator);
+
 #if BX_CONFIG_SUPPORTS_THREADING
 	ctx->m_DataPoolMutex = BX_NEW(allocator, bx::Mutex)();
 #endif
@@ -617,7 +606,6 @@ void destroyContext(Context* ctx)
 {
 	bx::AllocatorI* allocator = ctx->m_Allocator;
 
-
 	for (uint32_t i = 0; i < DrawCommand::Type::NumTypes; ++i) {
 		if (bgfx::isValid(ctx->m_ProgramHandle[i])) {
 			bgfx::destroy(ctx->m_ProgramHandle[i]);
@@ -672,49 +660,20 @@ void destroyContext(Context* ctx)
 	ctx->m_IndexBuffers = nullptr;
 	ctx->m_ActiveIndexBufferID = UINT16_MAX;
 
-	for (uint32_t i = 0; i < ctx->m_Vec2DataPoolCapacity; ++i) {
-		float* buffer = ctx->m_Vec2DataPool[i];
-		if (!buffer) {
-			continue;
-		}
-
-		if ((uintptr_t)buffer & 1) {
-			buffer = (float*)((uintptr_t)buffer & ~1);
-			bx::alignedFree(allocator, buffer, 16);
-		}
+	if (ctx->m_UVBufferPool) {
+		bx::deleteObject(ctx->m_Allocator, ctx->m_UVBufferPool);
+		ctx->m_UVBufferPool = nullptr;
 	}
-	bx::free(allocator, ctx->m_Vec2DataPool);
-	ctx->m_Vec2DataPoolCapacity = 0;
 
-	for (uint32_t i = 0; i < ctx->m_Uint32DataPoolCapacity; ++i) {
-		uint32_t* buffer = ctx->m_Uint32DataPool[i];
-		if (!buffer) {
-			continue;
-		}
-
-		if ((uintptr_t)buffer & 1) {
-			buffer = (uint32_t*)((uintptr_t)buffer & ~1);
-			bx::alignedFree(allocator, buffer, 16);
-		}
+	if (ctx->m_ColorBufferPool) {
+		bx::deleteObject(ctx->m_Allocator, ctx->m_ColorBufferPool);
+		ctx->m_ColorBufferPool = nullptr;
 	}
-	bx::free(allocator, ctx->m_Uint32DataPool);
-	ctx->m_Uint32DataPoolCapacity = 0;
 
-#if VG_CONFIG_UV_INT16
-	for (uint32_t i = 0; i < ctx->m_UVDataPoolCapacity; ++i) {
-		int16_t* buffer = ctx->m_UVDataPool[i];
-		if (!buffer) {
-			continue;
-		}
-
-		if ((uintptr_t)buffer & 1) {
-			buffer = (int16_t*)((uintptr_t)buffer & ~1);
-			bx::alignedFree(allocator, buffer, 16);
-		}
-	}
-	bx::free(allocator, ctx->m_UVDataPool);
-	ctx->m_UVDataPoolCapacity = 0;
-#endif
+	if (ctx->m_PosBufferPool) {
+		bx::deleteObject(ctx->m_Allocator, ctx->m_PosBufferPool);
+		ctx->m_PosBufferPool = nullptr;
+ 	}
 
 	bx::free(allocator, ctx->m_DrawCommands);
 	ctx->m_DrawCommands = nullptr;
@@ -807,14 +766,10 @@ void end(Context* ctx)
 	if (numDrawCommands == 0) {
 		// Release the vertex buffer allocated in beginFrame()
 		VertexBuffer* vb = &ctx->m_VertexBuffers[ctx->m_FirstVertexBufferID];
-		releaseVertexBufferData_Vec2(ctx, vb->m_Pos);
-		releaseVertexBufferData_Uint32(ctx, vb->m_Color);
 
-#if VG_CONFIG_UV_INT16
-		releaseVertexBufferData_UV(ctx, vb->m_UV);
-#else
-		releaseVertexBufferData_Vec2(ctx, vb->m_UV);
-#endif
+		bx::free(ctx->m_PosBufferPool, vb->m_Pos);
+		bx::free(ctx->m_ColorBufferPool, vb->m_Color);
+		bx::free(ctx->m_UVBufferPool, vb->m_UV);
 
 		return;
 	}
@@ -838,13 +793,9 @@ void end(Context* ctx)
 			gpuvb->m_ColorBufferHandle = bgfx::createDynamicVertexBuffer(maxVBVertices, ctx->m_ColorVertexDecl, 0);
 		}
 
-		const bgfx::Memory* posMem = bgfx::makeRef(vb->m_Pos, sizeof(float) * 2 * vb->m_Count, releaseVertexBufferDataCallback_Vec2, ctx);
-		const bgfx::Memory* colorMem = bgfx::makeRef(vb->m_Color, sizeof(uint32_t) * vb->m_Count, releaseVertexBufferDataCallback_Uint32, ctx);
-#if VG_CONFIG_UV_INT16
-		const bgfx::Memory* uvMem = bgfx::makeRef(vb->m_UV, sizeof(int16_t) * 2 * vb->m_Count, releaseVertexBufferDataCallback_UV, ctx);
-#else
-		const bgfx::Memory* uvMem = bgfx::makeRef(vb->m_UV, sizeof(float) * 2 * vb->m_Count, releaseVertexBufferDataCallback_Vec2, ctx);
-#endif
+		const bgfx::Memory* posMem = bgfx::makeRef(vb->m_Pos, sizeof(float) * 2 * vb->m_Count, releaseVertexBufferPosCallback, ctx);
+		const bgfx::Memory* colorMem = bgfx::makeRef(vb->m_Color, sizeof(uint32_t) * vb->m_Count, releaseVertexBufferColorCallback, ctx);
+		const bgfx::Memory* uvMem = bgfx::makeRef(vb->m_UV, sizeof(uv_t) * 2 * vb->m_Count, releaseVertexBufferUVCallback, ctx);
 
 		bgfx::update(gpuvb->m_PosBufferHandle, 0, posMem);
 		bgfx::update(gpuvb->m_UVBufferHandle, 0, uvMem);
@@ -3832,14 +3783,14 @@ static VertexBuffer* allocVertexBuffer(Context* ctx)
 		gpuvb->m_ColorBufferHandle = BGFX_INVALID_HANDLE;
 	}
 
-	VertexBuffer* vb = &ctx->m_VertexBuffers[ctx->m_NumVertexBuffers++];
-	vb->m_Pos = allocVertexBufferData_Vec2(ctx);
-#if VG_CONFIG_UV_INT16
-	vb->m_UV = allocVertexBufferData_UV(ctx);
-#else
-	vb->m_UV = allocVertexBufferData_Vec2(ctx);
+#if BX_CONFIG_SUPPORTS_THREADING
+	bx::MutexScope ms(*ctx->m_DataPoolMutex);
 #endif
-	vb->m_Color = allocVertexBufferData_Uint32(ctx);
+
+	VertexBuffer* vb = &ctx->m_VertexBuffers[ctx->m_NumVertexBuffers++];
+	vb->m_Pos = (float*)bx::alloc(ctx->m_PosBufferPool, sizeof(float) * 2 * ctx->m_Config.m_MaxVBVertices);
+	vb->m_Color = (uint32_t*)bx::alloc(ctx->m_ColorBufferPool, sizeof(uint32_t) * ctx->m_Config.m_MaxVBVertices);
+	vb->m_UV = (uv_t*)bx::alloc(ctx->m_UVBufferPool, sizeof(uv_t) * 2 * ctx->m_Config.m_MaxVBVertices);
 	vb->m_Count = 0;
 
 	return vb;
@@ -3878,158 +3829,6 @@ static uint16_t allocIndexBuffer(Context* ctx)
 
 	return ibID;
 }
-
-static float* allocVertexBufferData_Vec2(Context* ctx)
-{
-#if BX_CONFIG_SUPPORTS_THREADING
-	bx::MutexScope ms(*ctx->m_DataPoolMutex);
-#endif
-
-	bx::AllocatorI* allocator = ctx->m_Allocator;
-
-	const uint32_t capacity = ctx->m_Vec2DataPoolCapacity;
-	for (uint32_t i = 0; i < capacity; ++i) {
-		float* data = ctx->m_Vec2DataPool[i];
-		// If LSB of pointer is set it means that the ptr is valid and the buffer is free for reuse.
-		if (((uintptr_t)data) & 1) {
-			// Remove the free flag
-			data = (float*)((uintptr_t)data & ~1);;
-			ctx->m_Vec2DataPool[i] = data;
-			return data;
-		} else if (data == nullptr) {
-			data = (float*)bx::alignedAlloc(allocator, sizeof(float) * 2 * ctx->m_Config.m_MaxVBVertices, 16);
-			ctx->m_Vec2DataPool[i] = data;
-			return data;
-		}
-	}
-
-	ctx->m_Vec2DataPoolCapacity += 8;
-	ctx->m_Vec2DataPool = (float**)bx::realloc(allocator, ctx->m_Vec2DataPool, sizeof(float*) * ctx->m_Vec2DataPoolCapacity);
-	bx::memSet(&ctx->m_Vec2DataPool[capacity], 0, sizeof(float*) * (ctx->m_Vec2DataPoolCapacity - capacity));
-
-	ctx->m_Vec2DataPool[capacity] = (float*)bx::alignedAlloc(allocator, sizeof(float) * 2 * ctx->m_Config.m_MaxVBVertices, 16);
-	return ctx->m_Vec2DataPool[capacity];
-}
-
-static uint32_t* allocVertexBufferData_Uint32(Context* ctx)
-{
-#if BX_CONFIG_SUPPORTS_THREADING
-	bx::MutexScope ms(*ctx->m_DataPoolMutex);
-#endif
-
-	bx::AllocatorI* allocator = ctx->m_Allocator;
-
-	const uint32_t capacity = ctx->m_Uint32DataPoolCapacity;
-	for (uint32_t i = 0; i < capacity; ++i) {
-		uint32_t* data = ctx->m_Uint32DataPool[i];
-		// If LSB of pointer is set it means that the ptr is valid and the buffer is free for reuse.
-		if (((uintptr_t)data) & 1) {
-			// Remove the free flag
-			data = (uint32_t*)((uintptr_t)data & ~1);
-			ctx->m_Uint32DataPool[i] = data;
-			return data;
-		} else if (data == nullptr) {
-			data = (uint32_t*)bx::alignedAlloc(allocator, sizeof(uint32_t) * ctx->m_Config.m_MaxVBVertices, 16);
-			ctx->m_Uint32DataPool[i] = data;
-			return data;
-		}
-	}
-
-	ctx->m_Uint32DataPoolCapacity += 8;
-	ctx->m_Uint32DataPool = (uint32_t**)bx::realloc(allocator, ctx->m_Uint32DataPool, sizeof(uint32_t*) * ctx->m_Uint32DataPoolCapacity);
-	bx::memSet(&ctx->m_Uint32DataPool[capacity], 0, sizeof(uint32_t*) * (ctx->m_Uint32DataPoolCapacity - capacity));
-
-	ctx->m_Uint32DataPool[capacity] = (uint32_t*)bx::alignedAlloc(allocator, sizeof(uint32_t) * ctx->m_Config.m_MaxVBVertices, 16);
-	return ctx->m_Uint32DataPool[capacity];
-}
-
-#if VG_CONFIG_UV_INT16
-static int16_t* allocVertexBufferData_UV(Context* ctx)
-{
-#if BX_CONFIG_SUPPORTS_THREADING
-	bx::MutexScope ms(*ctx->m_DataPoolMutex);
-#endif
-
-	bx::AllocatorI* allocator = ctx->m_Allocator;
-
-	const uint32_t capacity = ctx->m_UVDataPoolCapacity;
-	for (uint32_t i = 0; i < capacity; ++i) {
-		int16_t* data = ctx->m_UVDataPool[i];
-
-		// If LSB of pointer is set it means that the ptr is valid and the buffer is free for reuse.
-		if (((uintptr_t)data) & 1) {
-			// Remove the free flag
-			data = (int16_t*)((uintptr_t)data & ~1);
-			ctx->m_UVDataPool[i] = data;
-			return data;
-		} else if (data == nullptr) {
-			data = (int16_t*)bx::alignedAlloc(allocator, sizeof(int16_t) * 2 * ctx->m_Config.m_MaxVBVertices, 16);
-			ctx->m_UVDataPool[i] = data;
-			return data;
-		}
-	}
-
-	ctx->m_UVDataPoolCapacity += 8;
-	ctx->m_UVDataPool = (int16_t**)bx::realloc(allocator, ctx->m_UVDataPool, sizeof(int16_t*) * ctx->m_UVDataPoolCapacity);
-	bx::memSet(&ctx->m_UVDataPool[capacity], 0, sizeof(int16_t*) * (ctx->m_UVDataPoolCapacity - capacity));
-
-	ctx->m_UVDataPool[capacity] = (int16_t*)bx::alignedAlloc(allocator, sizeof(int16_t) * 2 * ctx->m_Config.m_MaxVBVertices, 16);
-	return ctx->m_UVDataPool[capacity];
-}
-#endif
-
-static void releaseVertexBufferData_Vec2(Context* ctx, float* data)
-{
-#if BX_CONFIG_SUPPORTS_THREADING
-	bx::MutexScope ms(*ctx->m_DataPoolMutex);
-#endif
-
-	VG_CHECK(data != nullptr, "Tried to release a null vertex buffer");
-	const uint32_t capacity = ctx->m_Vec2DataPoolCapacity;
-	for (uint32_t i = 0; i < capacity; ++i) {
-		if (ctx->m_Vec2DataPool[i] == data) {
-			// Mark buffer as free by setting the LSB of the ptr to 1.
-			ctx->m_Vec2DataPool[i] = (float*)((uintptr_t)ctx->m_Vec2DataPool[i] | 1);
-			break;
-		}
-	}
-}
-
-static void releaseVertexBufferData_Uint32(Context* ctx, uint32_t* data)
-{
-#if BX_CONFIG_SUPPORTS_THREADING
-	bx::MutexScope ms(*ctx->m_DataPoolMutex);
-#endif
-
-	VG_CHECK(data != nullptr, "Tried to release a null vertex buffer");
-	const uint32_t capacity = ctx->m_Uint32DataPoolCapacity;
-	for (uint32_t i = 0; i < capacity; ++i) {
-		if (ctx->m_Uint32DataPool[i] == data) {
-			// Mark buffer as free by setting the LSB of the ptr to 1.
-			ctx->m_Uint32DataPool[i] = (uint32_t*)((uintptr_t)ctx->m_Uint32DataPool[i] | 1);
-			break;
-		}
-	}
-}
-
-#if VG_CONFIG_UV_INT16
-static void releaseVertexBufferData_UV(Context* ctx, int16_t* data)
-{
-#if BX_CONFIG_SUPPORTS_THREADING
-	bx::MutexScope ms(*ctx->m_DataPoolMutex);
-#endif
-
-	VG_CHECK(data != nullptr, "Tried to release a null vertex buffer");
-	const uint32_t capacity = ctx->m_UVDataPoolCapacity;
-	for (uint32_t i = 0; i < capacity; ++i) {
-		if (ctx->m_UVDataPool[i] == data) {
-			// Mark buffer as free by setting the LSB of the ptr to 1.
-			ctx->m_UVDataPool[i] = (int16_t*)((uintptr_t)ctx->m_UVDataPool[i] | 1);
-			break;
-		}
-	}
-}
-#endif
 
 static void releaseIndexBuffer(Context* ctx, uint16_t* data)
 {
@@ -4960,25 +4759,32 @@ static void submitCachedMesh(Context* ctx, ImagePatternHandle imgPattern, Color 
 }
 #endif // VG_CONFIG_ENABLE_SHAPE_CACHING
 
-static void releaseVertexBufferDataCallback_Vec2(void* ptr, void* userData)
+static void releaseVertexBufferPosCallback(void* ptr, void* userData)
 {
 	Context* ctx = (Context*)userData;
-	releaseVertexBufferData_Vec2(ctx, (float*)ptr);
-}
-
-static void releaseVertexBufferDataCallback_Uint32(void* ptr, void* userData)
-{
-	Context* ctx = (Context*)userData;
-	releaseVertexBufferData_Uint32(ctx, (uint32_t*)ptr);
-}
-
-#if VG_CONFIG_UV_INT16
-static void releaseVertexBufferDataCallback_UV(void* ptr, void* userData)
-{
-	Context* ctx = (Context*)userData;
-	releaseVertexBufferData_UV(ctx, (int16_t*)ptr);
-}
+#if BX_CONFIG_SUPPORTS_THREADING
+	bx::MutexScope ms(*ctx->m_DataPoolMutex);
 #endif
+	bx::free(ctx->m_PosBufferPool, ptr);
+}
+
+static void releaseVertexBufferColorCallback(void* ptr, void* userData)
+{
+	Context* ctx = (Context*)userData;
+#if BX_CONFIG_SUPPORTS_THREADING
+	bx::MutexScope ms(*ctx->m_DataPoolMutex);
+#endif
+	bx::free(ctx->m_ColorBufferPool, ptr);
+}
+
+static void releaseVertexBufferUVCallback(void* ptr, void* userData)
+{
+	Context* ctx = (Context*)userData;
+#if BX_CONFIG_SUPPORTS_THREADING
+	bx::MutexScope ms(*ctx->m_DataPoolMutex);
+#endif
+	bx::free(ctx->m_UVBufferPool, ptr);
+}
 
 static void releaseIndexBufferCallback(void* ptr, void* userData)
 {
