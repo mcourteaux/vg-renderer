@@ -732,7 +732,7 @@ void OutputPolymesh( TESStesselator *tess, TESSmesh *mesh, int elementType, int 
 			v = edge->Org;
 			if ( v->n == TESS_UNDEF )
 			{
-				v->n = (TESSindex)maxVertexCount;
+				v->n = maxVertexCount;
 				maxVertexCount++;
 			}
 			faceVerts++;
@@ -742,7 +742,7 @@ void OutputPolymesh( TESStesselator *tess, TESSmesh *mesh, int elementType, int 
 
 		assert( faceVerts <= polySize );
 
-		f->n = (TESSindex)maxFaceCount;
+		f->n = maxFaceCount;
 		++maxFaceCount;
 	}
 
@@ -905,8 +905,8 @@ void OutputContours( TESStesselator *tess, TESSmesh *mesh, int vertexSize )
 		}
 		while ( edge != start );
 
-		elements[0] = (TESSindex)startVert;
-		elements[1] = (TESSindex)vertCount;
+		elements[0] = startVert;
+		elements[1] = vertCount;
 		elements += 2;
 
 		startVert += vertCount;
