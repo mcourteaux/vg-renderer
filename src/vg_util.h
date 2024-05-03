@@ -2,6 +2,7 @@
 #define VG_UTIL_H
 
 #include <stdint.h>
+#include <bx/allocator.h>
 
 namespace vgutil
 {
@@ -42,6 +43,34 @@ inline void multiplyMatrix3(const float* __restrict a, const float* __restrict b
 	res[4] = a[0] * b[4] + a[2] * b[5] + a[4];
 	res[5] = a[1] * b[4] + a[3] * b[5] + a[5];
 }
+
+class PoolAllocator : public bx::AllocatorI
+{
+public:
+	PoolAllocator(uint32_t itemSize, uint32_t numItemsPerChunk, bx::AllocatorI* parentAllocator);
+	virtual ~PoolAllocator();
+
+	virtual void* realloc(void* _ptr, size_t _size, size_t _align, const char* _filePath, uint32_t _line);
+
+private:
+	struct FreeListItem
+	{
+		FreeListItem* m_Next;
+	};
+
+	struct Chunk
+	{
+		uint8_t* m_Buffer;
+		Chunk* m_Next;
+	};
+
+	bx::AllocatorI* m_ParentAllocator;
+	Chunk* m_FirstChunk;
+	FreeListItem* m_FirstFreeSlotPtr;
+	uint32_t m_ItemSize;
+	uint32_t m_NumItemsPerChunk;
+	uint32_t m_Flags;
+};
 }
 
 #endif
