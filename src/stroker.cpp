@@ -40,7 +40,7 @@ inline Vec2 vec2Dir(const Vec2& a, const Vec2& b)
 inline Vec2 calcExtrusionVector(const Vec2& d01, const Vec2& d12)
 {
 	// v is the vector from the path point to the outline point, assuming a stroke width of 1.0.
-	// Equation obtained by solving the intersection of the 2 line segments. d01 and d12 are 
+	// Equation obtained by solving the intersection of the 2 line segments. d01 and d12 are
 	// assumed to be normalized.
 	static const float kMaxExtrusionScale = 1.0f / 100.0f;
 	Vec2 v = vec2PerpCCW(d01);
@@ -121,7 +121,7 @@ static inline __m128 xmm_rcp(__m128 a)
 #elif RCP_ALGORITHM == 1
 	const __m128 inv_a = _mm_rcp_ps(a);
 #elif RCP_ALGORITHM == 2
-	// TODO: 
+	// TODO:
 #endif
 
 	return inv_a;
@@ -872,7 +872,7 @@ bool strokerConcaveFillEndAA(Stroker* stroker, Mesh* mesh, uint32_t color, FillR
 	if (!tessTesselate(stroker->m_Tesselator, windingRule, TESS_BOUNDARY_CONTOURS, 1, 2, &normal[0])) {
 		return false;
 	}
-	
+
 	const float* contourVerts = tessGetVertices(stroker->m_Tesselator);
 	const TESSindex* contourData = tessGetElements(stroker->m_Tesselator);
 	const int numContours = tessGetElementCount(stroker->m_Tesselator);
@@ -1363,7 +1363,7 @@ void polylineStroke(Stroker* stroker, Mesh* mesh, const Vec2* vtx, uint32_t numP
 			}
 		}
 	} else {
-		// Generate the first segment quad. 
+		// Generate the first segment quad.
 		uint16_t id[6] = {
 			prevSegmentLeftID, prevSegmentRightID, firstSegmentRightID,
 			prevSegmentLeftID, firstSegmentRightID, firstSegmentLeftID

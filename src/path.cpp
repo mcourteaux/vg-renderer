@@ -213,7 +213,7 @@ void pathArcTo(Path* path, float x1, float y1, float x2, float y2, float r)
 //	if (nvg__ptEquals(x0, y0, x1, y1, ctx->distTol) ||
 //		nvg__ptEquals(x1, y1, x2, y2, ctx->distTol) ||
 //		nvg__distPtSeg(x1, y1, x0, y0, x2, y2) < ctx->distTol * ctx->distTol ||
-//		radius < ctx->distTol) 
+//		radius < ctx->distTol)
 //	{
 //		nvgLineTo(ctx, x1,y1);
 //		return;

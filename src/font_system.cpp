@@ -165,7 +165,7 @@ FontSystem* fsCreate(vg::Context* ctx, bx::AllocatorI* allocator, const FontSyst
 	}
 	bx::memSet(fs->m_ImageData, 0, (size_t)cfg->m_AtlasWidth * (size_t)cfg->m_AtlasHeight);
 
-	// Initialize dirty rect (mark whole texture as dirty to 
+	// Initialize dirty rect (mark whole texture as dirty to
 	// force the renderer to update the texture)
 	fs->m_DirtyRect[0] = 0;
 	fs->m_DirtyRect[1] = 0;
@@ -453,8 +453,8 @@ static uint32_t fsTextBuildMesh(FontSystem* fs, TextBuffer* tb, vg::Context* ctx
 		for (uint32_t i = 0; i < numCodepoints; ++i) {
 			// Replace tabs with spaces. The same check is done below when deciding the width of the glyph.
 			// Tabs are stretched spaces.
-			const uint32_t codepoint = tb->m_Codepoints[i] == '\t' 
-				? ' ' 
+			const uint32_t codepoint = tb->m_Codepoints[i] == '\t'
+				? ' '
 				: tb->m_Codepoints[i]
 				;
 
@@ -648,7 +648,7 @@ static uint32_t decodeCodepoint(const char** str, const char* end)
 static inline bool isWhitespace(uint32_t codepoint)
 {
 	return false
-		|| codepoint == ' ' 
+		|| codepoint == ' '
 		|| codepoint == '\t'
 		;
 }
@@ -666,7 +666,7 @@ uint32_t fsTextBreakLines(FontSystem* fs, const vg::TextConfig& cfg, const char*
 		return 0;
 	}
 
-	// Decode UTF-8 string while searching for mandatory breaks. Every time a mandatory break is found, generate quads for 
+	// Decode UTF-8 string while searching for mandatory breaks. Every time a mandatory break is found, generate quads for
 	// the line and try to fit as many characters/words possible to each row.
 	TextBuffer* tb = &fs->m_TextBuffer;
 
@@ -995,14 +995,14 @@ static bool fsResetAtlas(FontSystem* fs, uint16_t width, uint16_t height)
 	return 1;
 }
 
-// Atlas based on Skyline Bin Packer by Jukka Jylänki
+// Atlas based on Skyline Bin Packer by Jukka JylÃ¤nki
 static Atlas* fsCreateAtlas(bx::AllocatorI* allocator, uint16_t w, uint16_t h)
 {
 	Atlas* atlas = (Atlas*)bx::alloc(allocator, sizeof(Atlas));
 	if (!atlas) {
 		return nullptr;
 	}
-	
+
 	bx::memSet(atlas, 0, sizeof(Atlas));
 	atlas->m_Allocator = allocator;
 	atlas->m_Width = w;
@@ -1042,7 +1042,7 @@ static uint32_t fsAtlasAllocNode(Atlas* atlas)
 
 		bx::memCopy(&newNodes[0], atlas->m_Nodes, sizeof(AtlasNode) * oldCapacity);
 		bx::memSet(&newNodes[oldCapacity], 0, sizeof(AtlasNode) * (newCapacity - oldCapacity));
-		
+
 		bx::free(atlas->m_Allocator, atlas->m_Nodes);
 		atlas->m_Nodes = newNodes;
 		atlas->m_NodeCapacity = newCapacity;
@@ -1071,7 +1071,7 @@ static bool fsAtlasInsertNode(Atlas* atlas, uint32_t nodeID, uint16_t x, uint16_
 
 	// Move everything up one slot
 	bx::memMove(&atlas->m_Nodes[nodeID + 1], &atlas->m_Nodes[nodeID], sizeof(AtlasNode) * (atlas->m_NumNodes - nodeID - 1));
-	
+
 	// Set the new node
 	fsAtlasSetNode(atlas, nodeID, x, y, w);
 
@@ -1115,7 +1115,7 @@ static bool fsAtlasAddRect(Atlas* atlas, uint16_t rectWidth, uint16_t rectHeight
 	if (!fsAtlasAddSkylineLevel(atlas, besti, (uint16_t)bestx, (uint16_t)besty, rectWidth, rectHeight)) {
 		return false;
 	}
-	
+
 	*rectX = (uint16_t)bestx;
 	*rectY = (uint16_t)besty;
 
@@ -1173,7 +1173,7 @@ static bool fsAtlasAddSkylineLevel(Atlas* atlas, uint32_t nodeID, uint16_t x, ui
 				curNode->m_X += shrink;
 				curNode->m_Width -= shrink;
 				break;
-			} 
+			}
 		} else {
 			break;
 		}
@@ -1237,8 +1237,8 @@ static uint32_t decodeUTF8(uint32_t* state, uint32_t* codep, uint8_t byte)
 
 	const uint32_t type = utf8d[byte];
 
-	*codep = (*state != FONS_UTF8_ACCEPT) 
-		? (byte & 0x3fu) | (*codep << 6) 
+	*codep = (*state != FONS_UTF8_ACCEPT)
+		? (byte & 0x3fu) | (*codep << 6)
 		: (0xff >> type) & (byte)
 		;
 
@@ -1558,8 +1558,8 @@ static Glyph* fsBakeGlyph(FontSystem* fs, Font* font, int32_t glyphIndex, uint32
 static Glyph* fsAllocGlyph(FontSystem* fs, Font* font)
 {
 	if (font->m_NumGlyphs + 1 > font->m_GlyphCapacity) {
-		font->m_GlyphCapacity = font->m_GlyphCapacity == 0 
-			? 8 
+		font->m_GlyphCapacity = font->m_GlyphCapacity == 0
+			? 8
 			: font->m_GlyphCapacity * 2
 			;
 
@@ -1629,7 +1629,7 @@ static void* fsBackendLoadFont(FontSystem* fs, uint8_t* data, uint32_t dataSize)
 
 	font->m_MinGlyphIndex = minGlyphIndex;
 	font->m_MaxGlyphIndex = maxGlyphIndex;
-	
+
 	const uint32_t numGlyphs = maxGlyphIndex - minGlyphIndex + 1;
 	const uint32_t totalPairs = numGlyphs * numGlyphs;
 	font->m_Kern = (int32_t*)bx::alloc(allocator, sizeof(int32_t) * totalPairs);
