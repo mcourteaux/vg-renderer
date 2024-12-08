@@ -1,10 +1,10 @@
-BX_STATIC_ASSERT(sizeof(vg_color) == sizeof(vg::Color));
-BX_STATIC_ASSERT(sizeof(vg_uv_t) == sizeof(vg::uv_t));
-BX_STATIC_ASSERT(sizeof(vg_context_config) == sizeof(vg::ContextConfig));
-BX_STATIC_ASSERT(sizeof(vg_stats) == sizeof(vg::Stats));
-BX_STATIC_ASSERT(sizeof(vg_text_config) == sizeof(vg::TextConfig));
-BX_STATIC_ASSERT(sizeof(vg_text_row) == sizeof(vg::TextRow));
-BX_STATIC_ASSERT(sizeof(vg_glyph_position) == sizeof(vg::GlyphPosition));
+static_assert(sizeof(vg_color) == sizeof(vg::Color));
+static_assert(sizeof(vg_uv_t) == sizeof(vg::uv_t));
+static_assert(sizeof(vg_context_config) == sizeof(vg::ContextConfig));
+static_assert(sizeof(vg_stats) == sizeof(vg::Stats));
+static_assert(sizeof(vg_text_config) == sizeof(vg::TextConfig));
+static_assert(sizeof(vg_text_row) == sizeof(vg::TextRow));
+static_assert(sizeof(vg_glyph_position) == sizeof(vg::GlyphPosition));
 
 namespace vg
 {

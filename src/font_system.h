@@ -43,7 +43,7 @@ struct TextQuad
 };
 
 #if VG_CONFIG_ENABLE_SIMD
-BX_STATIC_ASSERT((sizeof(TextQuad) & 15) == 0, "TextQuad size must be a multiple of 16");
+static_assert((sizeof(TextQuad) & 15) == 0, "TextQuad size must be a multiple of 16");
 #endif
 
 struct TextMesh
