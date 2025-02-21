@@ -30,17 +30,35 @@ inline float vec2Dot(const Vec2& a, const Vec2& b)   { return a.x * b.x + a.y * 
 // Direction from a to b
 inline Vec2 vec2Dir(const Vec2& a, const Vec2& b)
 {
+#if VG_CONFIG_ENABLE_SIMD && BX_CPU_X86
+	const __m128 va = _mm_set_ps(0, 0, a.y, a.x);
+	const __m128 vb = _mm_set_ps(0, 0, b.y, b.x);
+	const __m128 dxy = _mm_sub_ps(vb, va); // { dx, dy, DC, DC }
+	const __m128 dxySqr = _mm_mul_ps(dxy, dxy); // { dx * dx, dy * dy, DC, DC }
+	const __m128 dySqr = _mm_shuffle_ps(dxySqr, dxySqr, _MM_SHUFFLE(1, 1, 1, 1)); // { dy * dy, dy * dy, dy * dy, dy * dy }
+	const __m128 lenSqr = _mm_add_ss(dxySqr, dySqr);
+	__m128 dir = _mm_setzero_ps();
+	if (_mm_comigt_ss(lenSqr, _mm_set_ss(VG_EPSILON))) {
+		const __m128 invLen = _mm_rsqrt_ss(lenSqr);
+		dir = _mm_mul_ps(dxy, _mm_broadcastss_ps(invLen));
+	}
+	Vec2 result;
+	result.x = _mm_cvtss_f32(dir);  // Extract lowest float (dx)
+	result.y = _mm_cvtss_f32(_mm_shuffle_ps(dir, dir, _MM_SHUFFLE(1, 1, 1, 1)));  // Extract second-lowest float (dy)
+	return result;
+#else
 	const float dx = b.x - a.x;
 	const float dy = b.y - a.y;
 	const float lenSqr = dx * dx + dy * dy;
 	const float invLen = lenSqr < VG_EPSILON ? 0.0f : bx::rsqrt(lenSqr);
 	return{ dx * invLen, dy * invLen };
+#endif
 }
 
 inline Vec2 calcExtrusionVector(const Vec2& d01, const Vec2& d12)
 {
 	// v is the vector from the path point to the outline point, assuming a stroke width of 1.0.
-	// Equation obtained by solving the intersection of the 2 line segments. d01 and d12 are 
+	// Equation obtained by solving the intersection of the 2 line segments. d01 and d12 are
 	// assumed to be normalized.
 	static const float kMaxExtrusionScale = 1.0f / 100.0f;
 	Vec2 v = vec2PerpCCW(d01);
@@ -121,7 +139,7 @@ static inline __m128 xmm_rcp(__m128 a)
 #elif RCP_ALGORITHM == 1
 	const __m128 inv_a = _mm_rcp_ps(a);
 #elif RCP_ALGORITHM == 2
-	// TODO: 
+	// TODO:
 #endif
 
 	return inv_a;
@@ -209,11 +227,11 @@ void destroyStroker(Stroker* stroker)
     if (stroker->m_PosBuffer) {
         bx::alignedFree(allocator, stroker->m_PosBuffer, 16);
     }
-    
+
     if (stroker->m_ColorBuffer) {
         bx::alignedFree(allocator, stroker->m_ColorBuffer, 16);
     }
-    
+
     if (stroker->m_IndexBuffer) {
         bx::alignedFree(allocator, stroker->m_IndexBuffer, 16);
     }
@@ -879,7 +897,7 @@ bool strokerConcaveFillEndAA(Stroker* stroker, Mesh* mesh, uint32_t color, FillR
 	if (!tessTesselate(stroker->m_Tesselator, windingRule, TESS_BOUNDARY_CONTOURS, 1, 2, &normal[0])) {
 		return false;
 	}
-	
+
 	const float* contourVerts = tessGetVertices(stroker->m_Tesselator);
 	const TESSindex* contourData = tessGetElements(stroker->m_Tesselator);
 	const int numContours = tessGetElementCount(stroker->m_Tesselator);
@@ -1370,7 +1388,7 @@ void polylineStroke(Stroker* stroker, Mesh* mesh, const Vec2* vtx, uint32_t numP
 			}
 		}
 	} else {
-		// Generate the first segment quad. 
+		// Generate the first segment quad.
 		uint16_t id[6] = {
 			prevSegmentLeftID, prevSegmentRightID, firstSegmentRightID,
 			prevSegmentLeftID, firstSegmentRightID, firstSegmentLeftID
@@ -2347,7 +2365,7 @@ static BX_FORCE_INLINE void expandIB(Stroker* stroker, uint32_t n)
 }
 
 template<uint32_t N>
-static void addPos(Stroker* stroker, const Vec2* srcPos)
+static BX_FORCE_INLINE void addPos(Stroker* stroker, const Vec2* srcPos)
 {
 	VG_CHECK(stroker->m_NumVertices + N <= stroker->m_VertexCapacity, "Not enough free space for temporary geometry");
 
@@ -2358,7 +2376,7 @@ static void addPos(Stroker* stroker, const Vec2* srcPos)
 }
 
 template<uint32_t N>
-static void addPosColor(Stroker* stroker, const Vec2* srcPos, const uint32_t* srcColor)
+static BX_FORCE_INLINE void addPosColor(Stroker* stroker, const Vec2* srcPos, const uint32_t* srcColor)
 {
 	VG_CHECK(stroker->m_NumVertices + N <= stroker->m_VertexCapacity, "Not enough free space for temporary geometry");
 
@@ -2372,7 +2390,7 @@ static void addPosColor(Stroker* stroker, const Vec2* srcPos, const uint32_t* sr
 }
 
 template<uint32_t N>
-static void addIndices(Stroker* stroker, const uint16_t* src)
+static BX_FORCE_INLINE void addIndices(Stroker* stroker, const uint16_t* src)
 {
 	VG_CHECK(stroker->m_NumIndices + N <= stroker->m_IndexCapacity, "Not enough free space for temporary geometry");
 
