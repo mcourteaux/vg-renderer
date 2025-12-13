@@ -475,10 +475,10 @@ int fons__tt_getGlyphKernAdvance(FONSttFontImpl *font, int glyph1, int glyph2)
 			int kern = stbtt_GetGlyphKernAdvance(&font->font, glyph1, glyph2);
 			if (kern == 0) {
 				// Update to known-to-be-zero
-				uint64_entry |= 1 << bit_idx;
+				uint64_entry |= ((uint64_t)1) << bit_idx;
 			} else {
 				// Update to known-to-be-non-zero
-				uint64_entry |= 2 << bit_idx;
+				uint64_entry |= ((uint64_t)2) << bit_idx;
 			}
 			font->kern_codemap[uint64_idx] = uint64_entry;
 			return kern;
