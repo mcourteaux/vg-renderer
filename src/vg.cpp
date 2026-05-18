@@ -217,6 +217,7 @@ struct CommandType
 		TransformRotate,
 		TransformMult,
 		SetViewBox,
+		SetGlobalAlpha,
 
 		// Text
 		Text,
@@ -448,6 +449,7 @@ static void ctxTransformTranslate(Context* ctx, float x, float y);
 static void ctxTransformRotate(Context* ctx, float ang_rad);
 static void ctxTransformMult(Context* ctx, const float* mtx, TransformOrder::Enum order);
 static void ctxSetViewBox(Context* ctx, float x, float y, float w, float h);
+static void ctxSetGlobalAlpha(Context* ctx, float alpha);
 static void ctxIndexedTriList(Context* ctx, const float* pos, const uv_t* uv, uint32_t numVertices, const Color* colors, uint32_t numColors, const uint16_t* indices, uint32_t numIndices, ImageHandle img);
 static void ctxText(Context* ctx, const TextConfig& cfg, float x, float y, const char* str, const char* end);
 static void ctxTextBox(Context* ctx, const TextConfig& cfg, float x, float y, float breakWidth, const char* str, const char* end, uint32_t textboxFlags);
@@ -481,15 +483,16 @@ inline bool isLocal(ImagePatternHandle handle) { return isLocal(handle.flags); }
 Context* createContext(bx::AllocatorI* allocator, const ContextConfig* userCfg)
 {
 	static const ContextConfig defaultConfig = {
-		64,                          // m_MaxGradients
-		64,                          // m_MaxImagePatterns
-		8,                           // m_MaxFonts
-		32,                          // m_MaxStateStackSize
-		16,                          // m_MaxImages
-		256,                         // m_MaxCommandLists
-		65536,                       // m_MaxVBVertices
-		ImageFlags::Filter_Bilinear, // m_FontAtlasImageFlags
-		16                           // m_MaxCommandListDepth
+		.m_MaxGradients            = 64,
+		.m_MaxImagePatterns        = 64,
+		.m_MaxFonts                = 8,
+		.m_MaxStateStackSize       = 32,
+		.m_MaxImages               = 16,
+		.m_MaxCommandLists         = 256,
+		.m_MaxVBVertices           = 65536,
+		.m_FontAtlasImageFlags     = ImageFlags::Filter_Bilinear,
+		.m_MaxCommandListDepth     = 16,
+		.m_ResetViewTransformOnEnd = true,
 	};
 
 	const ContextConfig* cfg = userCfg ? userCfg : &defaultConfig;
@@ -582,18 +585,20 @@ Context* createContext(bx::AllocatorI* allocator, const ContextConfig* userCfg)
 
 	// Initialize font system
 	const bgfx::Caps* caps = bgfx::getCaps();
-	FontSystemConfig fsCfg;
-	fsCfg.m_AtlasWidth = VG_CONFIG_MIN_FONT_ATLAS_SIZE;
-	fsCfg.m_AtlasHeight = VG_CONFIG_MIN_FONT_ATLAS_SIZE;
-	fsCfg.m_Flags = FontSystemFlags::Origin_TopLeft;
-	fsCfg.m_FontAtlasImageFlags = cfg->m_FontAtlasImageFlags;
-	// NOTE: White rect might get too large but since the atlas limit is the texture size limit
-	// it should be that large. Otherwise shapes cached when the atlas was 512x512 will get wrong
-	// white pixel UVs when the atlas gets to the texture size limit (should not happen but better
-	// be safe).
-	fsCfg.m_WhiteRectWidth = (uint16_t)(caps->limits.maxTextureSize / VG_CONFIG_MIN_FONT_ATLAS_SIZE);
-	fsCfg.m_WhiteRectHeight = (uint16_t)(caps->limits.maxTextureSize / VG_CONFIG_MIN_FONT_ATLAS_SIZE);
-	fsCfg.m_MaxTextureSize = caps->limits.maxTextureSize;
+	FontSystemConfig fsCfg
+	{
+		.m_AtlasWidth = VG_CONFIG_MIN_FONT_ATLAS_SIZE,
+		.m_AtlasHeight = VG_CONFIG_MIN_FONT_ATLAS_SIZE,
+		// NOTE: White rect might get too large but since the atlas limit is the texture size limit
+		// it should be that large. Otherwise shapes cached when the atlas was 512x512 will get wrong
+		// white pixel UVs when the atlas gets to the texture size limit (should not happen but better
+		// be safe).
+		.m_WhiteRectWidth = (uint16_t)(caps->limits.maxTextureSize / VG_CONFIG_MIN_FONT_ATLAS_SIZE),
+		.m_WhiteRectHeight = (uint16_t)(caps->limits.maxTextureSize / VG_CONFIG_MIN_FONT_ATLAS_SIZE),
+		.m_MaxTextureSize = caps->limits.maxTextureSize,
+		.m_Flags = FontSystemFlags::Origin_TopLeft,
+		.m_FontAtlasImageFlags = cfg->m_FontAtlasImageFlags,
+	};
 	ctx->m_FontSystem = fsCreate(ctx, allocator, &fsCfg);
 	if (!ctx->m_FontSystem) {
 		destroyContext(ctx);
@@ -822,11 +827,13 @@ void end(Context* ctx)
 	const uint16_t canvasHeight = ctx->m_CanvasHeight;
 	const float devicePixelRatio = ctx->m_DevicePixelRatio;
 
-	float viewMtx[16];
-	float projMtx[16];
-	bx::mtxIdentity(viewMtx);
-	bx::mtxOrtho(projMtx, 0.0f, (float)canvasWidth, (float)canvasHeight, 0.0f, 0.0f, 1.0f, 0.0f, bgfx::getCaps()->homogeneousDepth);
-	bgfx::setViewTransform(viewID, viewMtx, projMtx);
+	if (ctx->m_Config.m_ResetViewTransformOnEnd) {
+		float viewMtx[16];
+		float projMtx[16];
+		bx::mtxIdentity(viewMtx);
+		bx::mtxOrtho(projMtx, 0.0f, (float)canvasWidth, (float)canvasHeight, 0.0f, 0.0f, 1.0f, 0.0f, bgfx::getCaps()->homogeneousDepth);
+		bgfx::setViewTransform(viewID, viewMtx, projMtx);
+	}
 
 	uint16_t prevScissorRect[4] = { 0, 0, canvasWidth, canvasHeight};
 	uint16_t prevScissorID = UINT16_MAX;
@@ -904,7 +911,11 @@ void end(Context* ctx)
 			if (!bx::memCmp(cmdScissorRect, &prevScissorRect[0], sizeof(uint16_t) * 4)) {
 				bgfx::setScissor(prevScissorID);
 			} else {
-				prevScissorID = bgfx::setScissor(cmdScissorRect[0] * devicePixelRatio, cmdScissorRect[1] * devicePixelRatio, cmdScissorRect[2] * devicePixelRatio, cmdScissorRect[3] * devicePixelRatio);
+				prevScissorID = bgfx::setScissor(
+					cmdScissorRect[0] * devicePixelRatio,
+					cmdScissorRect[1] * devicePixelRatio,
+					cmdScissorRect[2] * devicePixelRatio,
+					cmdScissorRect[3] * devicePixelRatio);
 				bx::memCopy(prevScissorRect, cmdScissorRect, sizeof(uint16_t) * 4);
 			}
 		}
@@ -1186,8 +1197,7 @@ void submitCommandList(Context* ctx, CommandListHandle handle)
 
 void setGlobalAlpha(Context* ctx, float alpha)
 {
-	State* state = getState(ctx);
-	state->m_GlobalAlpha = alpha;
+	ctxSetGlobalAlpha(ctx, alpha);
 }
 
 void getTransform(Context* ctx, float* mtx)
@@ -2045,6 +2055,15 @@ void clSetViewBox(Context* ctx, CommandListHandle handle, float x, float y, floa
 	CMD_WRITE(ptr, float, h);
 }
 
+void clSetGlobalAlpha(Context* ctx, CommandListHandle handle, float alpha)
+{
+	VG_CHECK(isValid(handle), "Invalid command list handle");
+	CommandList* cl = &ctx->m_CmdLists[handle.idx];
+
+	uint8_t* ptr = clAllocCommand(ctx, cl, CommandType::SetGlobalAlpha, sizeof(float));
+	CMD_WRITE(ptr, float, alpha);
+}
+
 void clText(Context* ctx, CommandListHandle handle, const TextConfig& cfg, float x, float y, const char* str, const char* end)
 {
 	VG_CHECK(isValid(handle), "Invalid command list handle");
@@ -2347,6 +2366,13 @@ static void ctxFillPathGradient(Context* ctx, GradientHandle gradientHandle, uin
 	}
 #endif
 
+
+	const State *state = getState(ctx);
+	const Color black = colorSetAlpha(Colors::Black, 0xff * state->m_GlobalAlpha);
+	Mesh mesh;
+	const uint32_t* colors = &black;
+	uint32_t numColors = 1;
+
 	if (pathType == PathType::Convex) {
 		for (uint32_t i = 0; i < numSubPaths; ++i) {
 			const SubPath* subPath = &subPaths[i];
@@ -2356,11 +2382,6 @@ static void ctxFillPathGradient(Context* ctx, GradientHandle gradientHandle, uin
 
 			const float* vtx = &pathVertices[subPath->m_FirstVertexID << 1];
 			const uint32_t numPathVertices = subPath->m_NumVertices;
-
-			Mesh mesh;
-			const uint32_t black = Colors::Black;
-			const uint32_t* colors = &black;
-			uint32_t numColors = 1;
 
 			if (aa) {
 				strokerConvexFillAA(stroker, &mesh, vtx, numPathVertices, Colors::Black);
@@ -2390,11 +2411,6 @@ static void ctxFillPathGradient(Context* ctx, GradientHandle gradientHandle, uin
 			const uint32_t numPathVertices = subPath->m_NumVertices;
 			strokerConcaveFillAddContour(stroker, vtx, numPathVertices);
 		}
-
-		const Color black = Colors::Black;
-		Mesh mesh;
-		const uint32_t* colors = &black;
-		uint32_t numColors = 1;
 
 		bool decomposed = false;
 		if (aa) {
@@ -2686,7 +2702,7 @@ static void ctxStrokePathGradient(Context* ctx, GradientHandle gradientHandle, f
 		const bool isClosed = subPath->m_IsClosed;
 
 		Mesh mesh;
-		const uint32_t black = Colors::Black;
+		const uint32_t black = colorSetAlpha(Colors::Black, 0xff * state->m_GlobalAlpha);
 		const uint32_t* colors = &black;
 		uint32_t numColors = 1;
 
@@ -3264,6 +3280,12 @@ static void ctxSetViewBox(Context* ctx, float x, float y, float w, float h)
 	updateState(state);
 }
 
+static void ctxSetGlobalAlpha(Context* ctx, float alpha)
+{
+	State* state = getState(ctx);
+	state->m_GlobalAlpha = alpha;
+}
+
 static void ctxIndexedTriList(Context* ctx, const float* pos, const uv_t* uv, uint32_t numVertices, const Color* colors, uint32_t numColors, const uint16_t* indices, uint32_t numIndices, ImageHandle img)
 {
 	if (!isValid(img)) {
@@ -3697,6 +3719,10 @@ static void ctxSubmitCommandList(Context* ctx, CommandListHandle handle)
 			const float* viewBox = (float*)cmd;
 			cmd += sizeof(float) * 4;
 			ctxSetViewBox(ctx, viewBox[0], viewBox[1], viewBox[2], viewBox[3]);
+		} break;
+		case CommandType::SetGlobalAlpha: {
+			const float alpha = CMD_READ(cmd, float);
+			ctxSetGlobalAlpha(ctx, alpha);
 		} break;
 		case CommandType::BeginClip: {
 			const ClipRule::Enum rule = CMD_READ(cmd, ClipRule::Enum);

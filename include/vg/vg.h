@@ -53,7 +53,8 @@ typedef uint32_t Color;
 
 Color color4f(float r, float g, float b, float a);
 Color color4ub(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-Color colorHSB(float h, float s, float b);
+Color colorHSL(float h, float s, float l, float alpha = 1.0f);
+Color colorHSB(float h, float s, float b, float alpha = 1.0f);
 Color colorSetAlpha(Color c, uint8_t a);
 uint8_t colorGetRed(Color c);
 uint8_t colorGetGreen(Color c);
@@ -278,6 +279,7 @@ struct ContextConfig
 	uint32_t m_MaxVBVertices;       // default: 65536
 	uint32_t m_FontAtlasImageFlags; // default: ImageFlags::Filter_Bilinear
 	uint32_t m_MaxCommandListDepth; // default: 16
+	bool m_ResetViewTransformOnEnd; // default: true
 };
 
 struct Stats
@@ -475,6 +477,7 @@ void clTransformTranslate(Context* ctx, CommandListHandle handle, float x, float
 void clTransformRotate(Context* ctx, CommandListHandle handle, float ang_rad);
 void clTransformMult(Context* ctx, CommandListHandle handle, const float* mtx, TransformOrder::Enum order);
 void clSetViewBox(Context* ctx, CommandListHandle handle, float x, float y, float w, float h);
+void clSetGlobalAlpha(Context* ctx, CommandListHandle handle, float alpha);
 
 void clText(Context* ctx, CommandListHandle handle, const TextConfig& cfg, float x, float y, const char* str, const char* end);
 void clTextBox(Context* ctx, CommandListHandle handle, const TextConfig& cfg, float x, float y, float breakWidth, const char* str, const char* end, uint32_t textboxFlags);
@@ -540,6 +543,9 @@ void clTransformScale(CommandListRef& ref, float x, float y);
 void clTransformTranslate(CommandListRef& ref, float x, float y);
 void clTransformRotate(CommandListRef& ref, float ang_rad);
 void clTransformMult(CommandListRef& ref, const float* mtx, TransformOrder::Enum order);
+void clSetViewBox(CommandListRef &ref, float x, float y, float w, float h);
+void clSetGlobalAlpha(CommandListRef &ref, float alpha);
+
 void clText(CommandListRef& ref, const TextConfig& cfg, float x, float y, const char* str, const char* end);
 void clTextBox(CommandListRef& ref, const TextConfig& cfg, float x, float y, float breakWidth, const char* str, const char* end, uint32_t textboxFlags);
 void clSubmitCommandList(CommandListRef& ref, CommandListHandle child);
